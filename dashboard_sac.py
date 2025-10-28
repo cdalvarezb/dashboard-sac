@@ -571,7 +571,7 @@ if df.empty:
 st.markdown(f"""
     <div class='main-header'>
         <h1>📊 Dashboard SAC - Métricas de Conversaciones</h1>
-        <p>✅ {len(df):,} conversaciones cargadas | 🔄 Actualizado cada 6 horas | 📅 Datos hasta {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+        <p>✅ {len(df):,} conversaciones cargadas | 🔄 Actualizado cada 6 horas | 📅 Datos hasta {(df["closed_at"].max() - timedelta(hours=5)).strftime("%d/%m/%Y %H:%M")}</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -700,13 +700,13 @@ with col4:
     if len(ai_resolved_data) > 0:
         csat_ai = (ai_resolved_data.sum() / len(ai_resolved_data) * 100)
         st.metric(
-            "🤖 CSAT AI",
+            "🤖 Auditoría AI",
             f"{csat_ai:.2f}%",
             delta=f"{len(ai_resolved_data):,}/{len(df_filtered):,}",
             help="Problemas resueltos según AI"
         )
     else:
-        st.metric("🤖 CSAT AI", "N/A")
+        st.metric("🤖 Auditoría AI", "N/A")
 
 with col5:
     client_resolved_data = df_filtered['request_solved'].dropna()
@@ -941,7 +941,7 @@ with tab3:
         client_not_resolved = len(client_evaluated) - client_resolved if len(client_evaluated) > 0 else 0
         
         csat_comparison = pd.DataFrame({
-            'Tipo': ['CSAT AI', 'CSAT Cliente'],
+            'Tipo': ['Auditoría AI', 'CSAT Cliente'],
             'Resuelto': [ai_resolved, client_resolved],
             'No Resuelto': [ai_not_resolved, client_not_resolved],
             'Sin Evaluar': [
@@ -1162,12 +1162,13 @@ st.markdown("<hr>", unsafe_allow_html=True)
 # Tabla de datos detallados con diseño mejorado
 st.markdown("<div class='section-header'><h2>📋 Datos Detallados</h2></div>", unsafe_allow_html=True)
 
-with st.expander("🔍 Ver tabla de datos filtrados", expanded=False):
+with st.expander("🔍 Ver tabla de datos", expanded=False):
     display_columns = [
         'conversation_id', 'responsible_email', 'queue_name', 'category_name',
-        'mttr_hours', 'art_hours', 'frt_minutes', 'conversation_duration_hours',
+        'mttr_hours', 'art_hours', 'frt_minutes', 'ai_summary',
         'difficulty_category', 'ai_problem_resolved', 'request_solved',
-        'ai_sentiment_score', 'total_transferences', 'closed_at'
+        'ai_sentiment_score', 'total_transferences', 'closed_at', 'agent_to_client_avg_minutes',
+        'agent_to_client_p75_minutes', 'agent_to_client_p95_minutes'
     ]
     
     df_display = df_filtered[display_columns].copy()
@@ -1176,13 +1177,12 @@ with st.expander("🔍 Ver tabla de datos filtrados", expanded=False):
     df_display[numeric_cols] = df_display[numeric_cols].round(2)
     
     st.dataframe(
-        df_display.sort_values('closed_at', ascending=False).head(1000),
+        df_display.sort_values('closed_at', ascending=False),
         use_container_width=True,
         height=400
     )
     
-    if len(df_filtered) > 1000:
-        st.info(f"ℹ️ Mostrando las 1,000 conversaciones más recientes de {len(df_filtered):,} totales")
+    st.info(f"ℹ️ Mostrando {len(df_filtered):,} conversaciones totales")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
