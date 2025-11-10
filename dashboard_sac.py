@@ -350,14 +350,15 @@ def create_plotly_theme(fig, title="", height=400):
     return fig
 
 # Función para cargar datos desde API con paginación
+# Función para cargar datos desde API con paginación CORREGIDA
 @st.cache_data(ttl=21600)  # 6 horas = 21600 segundos
 def load_data():
-    """Carga TODOS los datos de Supabase"""
+    """Carga TODOS los datos de Supabase usando paginación correcta"""
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         
         all_data = []
-        page_size = 5000  # Aumentado para menos requests y carga más rápida
+        page_size = 1000  # Supabase tiene límite de 1000 por request
         offset = 0
         
         # Crear barra de progreso
@@ -367,7 +368,7 @@ def load_data():
         # Obtener el conteo total real
         try:
             count_response = supabase.table('conversation_metrics')\
-                .select('id', count='exact')\
+                .select('conversation_id', count='exact')\
                 .limit(1)\
                 .execute()
             total_count = count_response.count if hasattr(count_response, 'count') else 100000
@@ -378,21 +379,30 @@ def load_data():
         
         # Paginación usando limit y offset
         iteration = 0
-        while True:
+        max_iterations = 1000  # Protección contra loops infinitos
+        
+        while iteration < max_iterations:
             status_text.text(f"⏳ Cargando registros {offset:,} - {offset + page_size:,}... ({len(all_data):,} cargados de ~{total_count:,})")
             
             try:
+                # Sin order para máxima velocidad - el orden no importa para análisis
                 response = supabase.table('conversation_metrics')\
                     .select('*')\
                     .limit(page_size)\
                     .offset(offset)\
                     .execute()
                 
-                if not response.data or len(response.data) == 0:
+                current_batch = len(response.data) if response.data else 0
+                
+                if not response.data or current_batch == 0:
                     status_text.text(f"✅ No hay más datos. Total cargado: {len(all_data):,}")
                     break
                 
                 all_data.extend(response.data)
+                
+                # Log para debug
+                if iteration % 10 == 0:
+                    st.info(f"📦 Iteración {iteration}: {current_batch} registros en este batch, {len(all_data):,} total")
                 
                 # Actualizar progreso
                 if total_count > 0:
@@ -400,7 +410,7 @@ def load_data():
                     progress_bar.progress(progress)
                 
                 # Si obtuvimos menos registros que page_size, llegamos al final
-                if len(response.data) < page_size:
+                if current_batch < page_size:
                     status_text.text(f"✅ Última página cargada. Total: {len(all_data):,}")
                     break
                 
@@ -1327,5 +1337,6 @@ st.markdown(f"""
         <p style='margin: 1rem 0 0 0; font-size: 0.8rem; opacity: 0.7;'>Desarrollado con ❤️ usando Streamlit + Plotly + Supabase</p>
     </div>
 """, unsafe_allow_html=True)
+
 
 
