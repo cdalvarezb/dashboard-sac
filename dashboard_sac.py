@@ -350,6 +350,7 @@ def create_plotly_theme(fig, title="", height=400):
     return fig
 
 # Función para cargar datos desde API con paginación
+# Función para cargar datos desde API con paginación
 @st.cache_data(ttl=21600)  # 6 horas = 21600 segundos
 def load_data():
     """Carga TODOS los datos de Supabase usando paginación correcta"""
@@ -460,6 +461,7 @@ def load_data():
         return pd.DataFrame()
     
 # Función para calcular FCR
+# @st.cache_data(ttl=3600)
 def calculate_fcr(_df, fecha_inicio, fecha_fin, window_hours=24, debug=False):
     """Calcula First Contact Resolution.
     Devuelve FCR (float) y, si debug=True, un dict con conteos y muestras.
@@ -621,34 +623,6 @@ st.sidebar.markdown("### 🏷️ Categoría")
 categorias = ['Todas'] + sorted(df['category_name'].dropna().unique().tolist())
 categoria_seleccionada = st.sidebar.selectbox("", categorias, label_visibility="collapsed", key="categoria")
 
-st.sidebar.markdown("### ⏱️ Ventana FCR")
-fcr_window_options = {
-    "12 horas": 12,
-    "24 horas": 24,
-    "48 horas": 48,
-    "7 días": 168
-}
-fcr_window_label = st.sidebar.selectbox(
-    "", 
-    list(fcr_window_options.keys()), 
-    index=2,  # 48 horas por defecto
-    label_visibility="collapsed", 
-    key="fcr_window",
-    help="Tiempo máximo para considerar un recontacto en el cálculo de FCR"
-)
-fcr_window_hours = fcr_window_options[fcr_window_label]
-
-st.sidebar.markdown("### 🔄 Transferencias")
-transferencias_options = ['Todas', '0', '1', '2', '3', '>3']
-transferencias_seleccionadas = st.sidebar.multiselect(
-    "",
-    transferencias_options,
-    default=['Todas'],
-    label_visibility="collapsed",
-    key="transferencias",
-    help="Filtra conversaciones por número de transferencias"
-)
-
 st.sidebar.markdown("---")
 
 # Botones de acción
@@ -688,30 +662,6 @@ if cola_seleccionada != 'Todas':
 if categoria_seleccionada != 'Todas':
     df_filtered = df_filtered[df_filtered['category_name'] == categoria_seleccionada]
 
-# Filtro de transferencias
-if 'Todas' not in transferencias_seleccionadas and len(transferencias_seleccionadas) > 0:
-    # Crear máscaras para cada opción seleccionada
-    transfer_masks = []
-    
-    for opcion in transferencias_seleccionadas:
-        if opcion == '0':
-            transfer_masks.append(df_filtered['total_transferences'] == 0)
-        elif opcion == '1':
-            transfer_masks.append(df_filtered['total_transferences'] == 1)
-        elif opcion == '2':
-            transfer_masks.append(df_filtered['total_transferences'] == 2)
-        elif opcion == '3':
-            transfer_masks.append(df_filtered['total_transferences'] == 3)
-        elif opcion == '>3':
-            transfer_masks.append(df_filtered['total_transferences'] > 3)
-    
-    # Combinar todas las máscaras con OR
-    if transfer_masks:
-        combined_mask = transfer_masks[0]
-        for mask in transfer_masks[1:]:
-            combined_mask = combined_mask | mask
-        df_filtered = df_filtered[combined_mask]
-
 if len(df_filtered) == 0:
     st.warning("⚠️ No hay datos para los filtros seleccionados.")
     st.stop()
@@ -719,37 +669,33 @@ if len(df_filtered) == 0:
 # KPIs Principales con diseño mejorado
 st.markdown("<div class='section-header'><h2>📈 Indicadores Clave de Desempeño (KPIs)</h2></div>", unsafe_allow_html=True)
 
-# --- KPIs principales reordenados ---
-
 col1, col2, col3, col4, col5 = st.columns(5)
 
-# ⭐ CSAT Cliente
 with col1:
-    client_resolved_data = df_filtered['request_solved'].dropna()
-    surveys_sent = df_filtered[df_filtered['sended_templates'].str.contains('survey_closing_message', case=False, na=False)]
-    total_surveys_sent = len(surveys_sent)
-    total_responses = len(client_resolved_data)
-    response_rate = (total_responses / total_surveys_sent * 100) if total_surveys_sent > 0 else 0
+    mttr_avg = df_filtered['mttr_hours'].mean()
+    st.metric(
+        "⏱️ MTTR Promedio",
+        f"{mttr_avg:.2f}h" if not pd.isna(mttr_avg) else "N/A",
+        help="Mean Time To Resolution - Tiempo medio de cierre"
+    )
 
-    if len(client_resolved_data) > 0:
-        csat_client = (client_resolved_data.sum() / len(client_resolved_data) * 100)
-        st.metric(
-            "⭐ CSAT Cliente",
-            f"{csat_client:.2f}%",
-            delta=f"{response_rate:.1f}% resp.",  # corto, visible siempre
-            help=(
-                f"Customer Satisfaction (CSAT)\n\n"
-                f"📊 {csat_client:.2f}% de clientes marcaron su problema como resuelto.\n"
-                f"📬 Encuestas enviadas: {total_surveys_sent:,}\n"
-                f"🗳️ Respuestas recibidas: {total_responses:,}\n"
-                f"📈 Tasa de respuesta: {response_rate:.1f}%"
-            )
-        )
-    else:
-        st.metric("⭐ CSAT Cliente", "N/A", help="No hay datos de encuestas disponibles.")
-
-# 🤖 Auditoría AI
 with col2:
+    art_avg = df_filtered['art_hours'].mean()
+    st.metric(
+        "⚡ ART Promedio",
+        f"{art_avg:.2f}h" if not pd.isna(art_avg) else "N/A",
+        help="Average Resolution Time - Desde asignación hasta cierre"
+    )
+
+with col3:
+    frt_avg = df_filtered['frt_minutes'].mean()
+    st.metric(
+        "🚀 FRT Promedio",
+        f"{frt_avg:.2f}min" if not pd.isna(frt_avg) else "N/A",
+        help="First Response Time - Tiempo de primera respuesta"
+    )
+
+with col4:
     ai_resolved_data = df_filtered['ai_problem_resolved'].dropna()
     if len(ai_resolved_data) > 0:
         csat_ai = (ai_resolved_data.sum() / len(ai_resolved_data) * 100)
@@ -757,109 +703,53 @@ with col2:
             "🤖 Auditoría AI",
             f"{csat_ai:.2f}%",
             delta=f"{len(ai_resolved_data):,}/{len(df_filtered):,}",
-            help=(
-                "Evaluación automática del desempeño del agente IA.\n\n"
-                f"📊 {csat_ai:.2f}% de conversaciones fueron clasificadas como *resueltas* por IA.\n"
-                f"🧠 Total auditadas: {len(ai_resolved_data):,}\n"
-                f"💬 Total conversaciones: {len(df_filtered):,}"
-            )
+            help="Problemas resueltos según AI"
         )
     else:
-        st.metric("🤖 Auditoría AI", "N/A", help="No hay datos de auditoría de IA disponibles.")
+        st.metric("🤖 Auditoría AI", "N/A")
 
-# 🚀 FRT Promedio
-with col3:
-    frt_avg = df_filtered['frt_minutes'].mean()
-    st.metric(
-        "🚀 FRT Promedio",
-        f"{frt_avg:.2f}min" if not pd.isna(frt_avg) else "N/A",
-        help=(
-            "First Response Time - Tiempo promedio hasta la primera respuesta del agente.\n\n"
-            "🕒 Mide la rapidez de atención inicial al cliente.\n"
-            f"📉 Promedio actual: {frt_avg:.2f} minutos."
-        )
-    )
-
-# ⚡ ART Promedio
-with col4:
-    art_avg = df_filtered['art_hours'].mean()
-    st.metric(
-        "⚡ ART Promedio",
-        f"{art_avg:.2f}h" if not pd.isna(art_avg) else "N/A",
-        help=(
-            "Average Resolution Time - Tiempo promedio desde asignación hasta el cierre del ticket.\n\n"
-            "📈 Mide la eficiencia del flujo interno de resolución.\n"
-            f"🕒 Promedio actual: {art_avg:.2f} horas."
-        )
-    )
-
-# ⏱️ MTTR Promedio
 with col5:
-    mttr_avg = df_filtered['mttr_hours'].mean()
-    st.metric(
-        "⏱️ MTTR Promedio",
-        f"{mttr_avg:.2f}h" if not pd.isna(mttr_avg) else "N/A",
-        help=(
-            "Mean Time To Resolution - Tiempo total promedio desde la creación hasta el cierre.\n\n"
-            "📊 Mide el rendimiento general del ciclo de resolución.\n"
-            f"🕒 Promedio actual: {mttr_avg:.2f} horas."
+    client_resolved_data = df_filtered['request_solved'].dropna()
+    if len(client_resolved_data) > 0:
+        csat_cliente = (client_resolved_data.sum() / len(client_resolved_data) * 100)
+        st.metric(
+            "⭐ CSAT Cliente",
+            f"{csat_cliente:.2f}%",
+            delta=f"{len(client_resolved_data):,}/{len(df_filtered):,}",
+            help="Problemas resueltos según clientes"
         )
-    )
+    else:
+        st.metric("⭐ CSAT Cliente", "N/A")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- Fila 2 de KPIs ---
+# Fila 2 de KPIs
 col6, col7, col8 = st.columns(3)
 
-# 🎯 FCR
 with col6:
     with st.spinner('Calculando FCR...'):
-        fcr_value = calculate_fcr(df_filtered, fecha_inicio, fecha_fin, window_hours=fcr_window_hours)
+        fcr_value = calculate_fcr(df_filtered, fecha_inicio, fecha_fin, window_hours=48)
     st.metric(
-        f"🎯 FCR ({fcr_window_label})",
-        f"{fcr_value:.2f}%" if not pd.isna(fcr_value) else "N/A",
-        help=(
-            "First Contact Resolution - Porcentaje de conversaciones resueltas en un solo contacto.\n\n"
-            f"📊 Ventana de análisis: {fcr_window_label}\n"
-            f"🎯 FCR actual: {fcr_value:.2f}%"
-        )
+        "🎯 FCR (First Contact Resolution)",
+        f"{fcr_value:.2f}%",
+        help="Porcentaje de clientes que NO recontactan en 48h"
     )
 
-# 💬 Total Conversaciones
 with col7:
-    total_conv = len(df_filtered)
-    perc_total = (total_conv / len(df) * 100) if len(df) > 0 else 0
     st.metric(
         "💬 Total Conversaciones",
-        f"{total_conv:,}",
-        delta=f"{perc_total:.1f}% del total",
-        help=(
-            "Cantidad total de conversaciones incluidas en el rango de fechas seleccionado.\n\n"
-            f"💬 Conversaciones filtradas: {total_conv:,}\n"
-            f"📅 Porcentaje sobre el total disponible: {perc_total:.1f}%"
-        )
+        f"{len(df_filtered):,}",
+        delta=f"{(len(df_filtered)/len(df)*100):.1f}% del total",
+        help="Total de conversaciones en el período seleccionado"
     )
 
-# 📊 Complejidad Promedio
 with col8:
-    if 'difficulty_index' in df_filtered.columns and not df_filtered['difficulty_index'].dropna().empty:
-        avg_complexity = df_filtered['difficulty_index'].mean()
-        min_complexity = df_filtered['difficulty_index'].min()
-        max_complexity = df_filtered['difficulty_index'].max()
-        st.metric(
-            "📊 Complejidad Promedio",
-            f"{avg_complexity:.2f}",
-            delta=f"{min_complexity:.1f}–{max_complexity:.1f}",
-            help=(
-                "Índice de dificultad de los casos analizados.\n\n"
-                f"📉 Mínimo: {min_complexity:.2f}\n"
-                f"📈 Máximo: {max_complexity:.2f}\n"
-                f"⚖️ Promedio general: {avg_complexity:.2f}"
-            )
-        )
-    else:
-        st.metric("📊 Complejidad Promedio", "N/A", help="No hay datos de complejidad disponibles.")
-
+    avg_complexity = df_filtered['difficulty_index'].mean()
+    st.metric(
+        "📊 Complejidad Promedio",
+        f"{avg_complexity:.2f}" if not pd.isna(avg_complexity) else "N/A",
+        help="Índice promedio de dificultad de casos"
+    )
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -995,7 +885,7 @@ with tab2:
         st.plotly_chart(fig_categories, use_container_width=True)
     
     with col_g4:
-        # Utilización de agentes
+    # Utilización de agentes
         agent_metrics = df_filtered.groupby('responsible_email').agg({
             'conversation_id': 'count',
             'difficulty_index': 'mean'
@@ -1277,8 +1167,7 @@ with st.expander("🔍 Ver tabla de datos", expanded=False):
         'conversation_id', 'responsible_email', 'queue_name', 'category_name',
         'mttr_hours', 'art_hours', 'frt_minutes', 'ai_summary',
         'difficulty_category', 'ai_problem_resolved', 'request_solved',
-        'ai_sentiment_score', 'total_transferences','time_losted_in_transferences_minutes',
-        'all_responsibles', 'sended_templates', 'closed_at', 'agent_to_client_avg_minutes',
+        'ai_sentiment_score', 'total_transferences', 'closed_at', 'agent_to_client_avg_minutes',
         'agent_to_client_p75_minutes', 'agent_to_client_p95_minutes'
     ]
     
@@ -1322,5 +1211,3 @@ st.markdown(f"""
         <p style='margin: 1rem 0 0 0; font-size: 0.8rem; opacity: 0.7;'>Desarrollado con ❤️ usando Streamlit + Plotly + Supabase</p>
     </div>
 """, unsafe_allow_html=True)
-
-
