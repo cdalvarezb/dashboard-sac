@@ -400,10 +400,6 @@ def load_data():
                 
                 all_data.extend(response.data)
                 
-                # Log para debug
-                if iteration % 10 == 0:
-                    st.info(f"📦 Iteración {iteration}: {current_batch} registros en este batch, {len(all_data):,} total")
-                
                 # Actualizar progreso
                 if total_count > 0:
                     progress = min(len(all_data) / total_count, 0.99)
@@ -429,7 +425,7 @@ def load_data():
         time.sleep(1.5)
         progress_bar.empty()
         status_text.empty()
-        
+
         if not all_data:
             st.error("No se cargaron datos")
             return pd.DataFrame()
@@ -1337,6 +1333,7 @@ st.markdown(f"""
         <p style='margin: 1rem 0 0 0; font-size: 0.8rem; opacity: 0.7;'>Desarrollado con ❤️ usando Streamlit + Plotly + Supabase</p>
     </div>
 """, unsafe_allow_html=True)
+
 
 
 
