@@ -350,14 +350,14 @@ def create_plotly_theme(fig, title="", height=400):
     return fig
 
 # Función para cargar datos desde API con paginación
-@st.cache_data(ttl=21600)  
+@st.cache_data(ttl=21600)  # 6 horas = 21600 segundos
 def load_data():
     """Carga TODOS los datos de Supabase"""
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         
         all_data = []
-        page_size = 1000  # Tamaño de página
+        page_size = 5000  # Aumentado para menos requests y carga más rápida
         offset = 0
         
         # Crear barra de progreso
@@ -367,9 +367,10 @@ def load_data():
         # Obtener el conteo total real
         try:
             count_response = supabase.table('conversation_metrics')\
-                .select('*', count='exact', head=True)\
+                .select('id', count='exact')\
+                .limit(1)\
                 .execute()
-            total_count = count_response.count
+            total_count = count_response.count if hasattr(count_response, 'count') else 100000
             status_text.text(f"📊 Total de registros en BD: {total_count:,}")
         except Exception as e:
             st.warning(f"No se pudo obtener el conteo: {str(e)}")
@@ -381,10 +382,8 @@ def load_data():
             status_text.text(f"⏳ Cargando registros {offset:,} - {offset + page_size:,}... ({len(all_data):,} cargados de ~{total_count:,})")
             
             try:
-                # Usar limit y offset en lugar de range
                 response = supabase.table('conversation_metrics')\
                     .select('*')\
-                    .order('closed_at', desc=True)\
                     .limit(page_size)\
                     .offset(offset)\
                     .execute()
@@ -408,12 +407,10 @@ def load_data():
                 offset += page_size
                 iteration += 1
                 
-                # Pequeña pausa cada 5 iteraciones para no saturar la API
-                if iteration % 5 == 0:
-                    time.sleep(0.2)
+                # Sin delays - cargar lo más rápido posible
                 
             except Exception as e:
-                st.error(f"Error en offset {offset}: {str(e)}")
+                st.error(f"❌ Error en offset {offset}: {str(e)}")
                 st.warning("Continuando con los datos cargados hasta ahora...")
                 break
         
@@ -1330,4 +1327,5 @@ st.markdown(f"""
         <p style='margin: 1rem 0 0 0; font-size: 0.8rem; opacity: 0.7;'>Desarrollado con ❤️ usando Streamlit + Plotly + Supabase</p>
     </div>
 """, unsafe_allow_html=True)
+
 
