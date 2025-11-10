@@ -20,6 +20,33 @@ st.set_page_config(
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 Debug Info")
+st.sidebar.write(f"**URL válida:** {SUPABASE_URL.startswith('https://')}")
+st.sidebar.write(f"**URL length:** {len(SUPABASE_URL)}")
+st.sidebar.write(f"**KEY length:** {len(SUPABASE_KEY)}")
+st.sidebar.write(f"**KEY starts with:** `{SUPABASE_KEY[:30]}...`")
+st.sidebar.write(f"**KEY ends with:** `...{SUPABASE_KEY[-10:]}`")
+
+# Verificar espacios
+url_clean = SUPABASE_URL.strip()
+key_clean = SUPABASE_KEY.strip()
+
+if url_clean != SUPABASE_URL:
+    st.sidebar.error("⚠️ URL tiene espacios!")
+    SUPABASE_URL = url_clean
+    
+if key_clean != SUPABASE_KEY:
+    st.sidebar.error("⚠️ KEY tiene espacios!")
+    SUPABASE_KEY = key_clean
+
+# Verificar formato de la key (debe ser JWT)
+if not SUPABASE_KEY.startswith('eyJ'):
+    st.sidebar.error("⚠️ La KEY no parece ser un JWT válido!")
+    st.sidebar.write("Debe empezar con 'eyJ'")
+    
+st.sidebar.markdown("---")
+
 # Estilos CSS personalizados mejorados
 st.markdown("""
     <style>
@@ -1322,3 +1349,4 @@ st.markdown(f"""
         <p style='margin: 1rem 0 0 0; font-size: 0.8rem; opacity: 0.7;'>Desarrollado con ❤️ usando Streamlit + Plotly + Supabase</p>
     </div>
 """, unsafe_allow_html=True)
+
