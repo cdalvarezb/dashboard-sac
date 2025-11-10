@@ -350,68 +350,76 @@ def create_plotly_theme(fig, title="", height=400):
     return fig
 
 # Función para cargar datos desde API con paginación
-@st.cache_data(ttl=21600)  # 6 horas = 21600 segundos
+@st.cache_data(ttl=21600)  
 def load_data():
-    """Carga TODOS los datos de Supabase usando paginación correcta"""
+    """Carga TODOS los datos de Supabase"""
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         
         all_data = []
-        page_size = 1000
-        page = 0
+        page_size = 1000  # Tamaño de página
+        offset = 0
         
         # Crear barra de progreso
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # Primero, obtener el conteo total (si es posible)
+        # Obtener el conteo total real
         try:
-            count_response = supabase.table('conversation_metrics').select('id', count='exact').limit(1).execute()
-            total_count = count_response.count if hasattr(count_response, 'count') else 500000
-        except:
-            total_count = 500000  # Estimado si no podemos obtener el count
+            count_response = supabase.table('conversation_metrics')\
+                .select('*', count='exact', head=True)\
+                .execute()
+            total_count = count_response.count
+            status_text.text(f"📊 Total de registros en BD: {total_count:,}")
+        except Exception as e:
+            st.warning(f"No se pudo obtener el conteo: {str(e)}")
+            total_count = 100000  # Estimado conservador
         
-        status_text.text(f"Preparando para cargar ~{total_count:,} registros...")
-        
-        # Paginación usando offset y limit
+        # Paginación usando limit y offset
+        iteration = 0
         while True:
-            start = page * page_size
-            end = start + page_size - 1
-            
-            status_text.text(f"Cargando registros {start:,} - {end:,}... ({len(all_data):,} cargados)")
+            status_text.text(f"⏳ Cargando registros {offset:,} - {offset + page_size:,}... ({len(all_data):,} cargados de ~{total_count:,})")
             
             try:
-                # Usar range para paginación
+                # Usar limit y offset en lugar de range
                 response = supabase.table('conversation_metrics')\
                     .select('*')\
-                    .range(start, end)\
+                    .order('closed_at', desc=True)\
+                    .limit(page_size)\
+                    .offset(offset)\
                     .execute()
                 
                 if not response.data or len(response.data) == 0:
+                    status_text.text(f"✅ No hay más datos. Total cargado: {len(all_data):,}")
                     break
                 
                 all_data.extend(response.data)
                 
                 # Actualizar progreso
-                progress = min(len(all_data) / total_count, 0.99)
-                progress_bar.progress(progress)
+                if total_count > 0:
+                    progress = min(len(all_data) / total_count, 0.99)
+                    progress_bar.progress(progress)
                 
                 # Si obtuvimos menos registros que page_size, llegamos al final
                 if len(response.data) < page_size:
+                    status_text.text(f"✅ Última página cargada. Total: {len(all_data):,}")
                     break
                 
-                page += 1
+                offset += page_size
+                iteration += 1
                 
-                # Pequeña pausa para no saturar la API
-                time.sleep(0.1)
+                # Pequeña pausa cada 5 iteraciones para no saturar la API
+                if iteration % 5 == 0:
+                    time.sleep(0.2)
                 
             except Exception as e:
-                st.warning(f"Error en página {page}: {str(e)}")
+                st.error(f"Error en offset {offset}: {str(e)}")
+                st.warning("Continuando con los datos cargados hasta ahora...")
                 break
         
         progress_bar.progress(1.0)
         status_text.text(f"✅ Carga completada: {len(all_data):,} registros")
-        time.sleep(1)
+        time.sleep(1.5)
         progress_bar.empty()
         status_text.empty()
         
@@ -1322,3 +1330,4 @@ st.markdown(f"""
         <p style='margin: 1rem 0 0 0; font-size: 0.8rem; opacity: 0.7;'>Desarrollado con ❤️ usando Streamlit + Plotly + Supabase</p>
     </div>
 """, unsafe_allow_html=True)
+
